@@ -1,7 +1,12 @@
 import asyncio
 import uvicorn
+import logging
 from fastapi import FastAPI, Request
 from .mcp_server import mcp
+
+# ロギングの設定
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Weather MCP Server")
 
@@ -11,7 +16,20 @@ async def handle_mcp_request(request: Request):
     try:
         # リクエストボディを取得
         body = await request.json()
+        logger.debug(f"Received request: {body}")
         
+        if body["method"] == "meta/name":
+            return {"jsonrpc": "2.0", "result": "My Custom MCP Server", "id": body["id"]}
+        if body["method"] == "meta/version":
+            return {"jsonrpc": "2.0", "result": "0.1.0", "id": body["id"]}
+        if body["method"] == "resources/list":
+            return {
+                "jsonrpc": "2.0",
+                "result": [
+                    {"name": "get_weather", "description": "天気を取得します"}
+                ],
+                "id": body["id"]
+            }
         # MCPリクエストを処理
         if body["method"] == "call_tool":
             tool_name = body["params"]["name"]
@@ -19,7 +37,8 @@ async def handle_mcp_request(request: Request):
             
             if tool_name == "get_weather":
                 result = await mcp.call_tool(tool_name, arguments)
-                return result
+                logger.debug(f"Tool result: {result}")
+                return {"jsonrpc": "2.0", "result": result, "id": body["id"]}
             else:
                 return {
                     "success": False,
@@ -32,6 +51,7 @@ async def handle_mcp_request(request: Request):
             }
         
     except Exception as e:
+        logger.error(f"Error processing request: {e}", exc_info=True)
         return {
             "success": False,
             "error": f"リクエストの処理中にエラーが発生しました: {str(e)}"
